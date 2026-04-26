@@ -192,7 +192,7 @@ class BBDownLauncher(ttk.Window):
             title_frame,
             text="简易 BBDown 下载启动器",
             font=("Microsoft YaHei", 11),
-            foreground="gray",
+            foreground="#555555",
         ).pack(anchor=W, pady=(0, 5))
 
         ttk.Separator(self, bootstyle=SECONDARY).pack(fill=X, padx=15)
@@ -298,13 +298,19 @@ class BBDownLauncher(ttk.Window):
     def _create_basic_frame(self):
         self.basic_frame = ttk.Frame(self.content_frame)
 
-        # BBDown 路径
+        # ===== 路径行（左右平分） =====
+        path_row = ttk.Frame(self.basic_frame)
+        path_row.pack(fill=X, pady=(10, 0))
+        path_row.columnconfigure(0, weight=1)
+        path_row.columnconfigure(1, weight=1)
+
+        # 左：BBDown 路径
+        left_path = ttk.Frame(path_row)
+        left_path.grid(row=0, column=0, sticky=EW, padx=(0, 10))
         ttk.Label(
-            self.basic_frame,
-            text="BBDown 路径",
-            font=("Microsoft YaHei", 10, "bold"),
-        ).pack(anchor=W, pady=(10, 0))
-        row1 = ttk.Frame(self.basic_frame)
+            left_path, text="BBDown 路径", font=("Microsoft YaHei", 10, "bold")
+        ).pack(anchor=W)
+        row1 = ttk.Frame(left_path)
         row1.pack(fill=X, pady=5)
         self.binpath_entry = ttk.Entry(row1)
         self.binpath_entry.pack(side=LEFT, fill=X, expand=True)
@@ -316,13 +322,13 @@ class BBDownLauncher(ttk.Window):
             width=10,
         ).pack(side=LEFT, padx=(5, 0))
 
-        # 保存路径
+        # 右：保存路径
+        right_path = ttk.Frame(path_row)
+        right_path.grid(row=0, column=1, sticky=EW, padx=(10, 0))
         ttk.Label(
-            self.basic_frame,
-            text="保存路径",
-            font=("Microsoft YaHei", 10, "bold"),
-        ).pack(anchor=W, pady=(10, 0))
-        row2 = ttk.Frame(self.basic_frame)
+            right_path, text="保存路径", font=("Microsoft YaHei", 10, "bold")
+        ).pack(anchor=W)
+        row2 = ttk.Frame(right_path)
         row2.pack(fill=X, pady=5)
         self.savepath_entry = ttk.Entry(row2)
         self.savepath_entry.pack(side=LEFT, fill=X, expand=True)
@@ -334,38 +340,50 @@ class BBDownLauncher(ttk.Window):
             width=10,
         ).pack(side=LEFT, padx=(5, 0))
 
-        # 视频链接
+        # ===== 内容行：视频链接 + 基本选项（左右平分） =====
+        content_row = ttk.Frame(self.basic_frame)
+        content_row.pack(fill=BOTH, expand=True, pady=10)
+        content_row.columnconfigure(0, weight=1)
+        content_row.columnconfigure(1, weight=1)
+        content_row.rowconfigure(0, weight=1)
+
+        # 左：视频链接
+        left_content = ttk.Frame(content_row)
+        left_content.grid(row=0, column=0, sticky=NSEW, padx=(0, 10))
+        left_title = ttk.Frame(left_content)
+        left_title.pack(fill=X)
         ttk.Label(
-            self.basic_frame,
-            text="视频链接",
-            font=("Microsoft YaHei", 10, "bold"),
-        ).pack(anchor=W, pady=(10, 0))
+            left_title, text="视频链接", font=("Microsoft YaHei", 10, "bold")
+        ).pack(side=LEFT)
         ttk.Label(
-            self.basic_frame,
+            left_title,
             text="支持多行，一行一个",
             font=("Microsoft YaHei", 9),
-            foreground="gray",
-        ).pack(anchor=W)
-        self.link_text = ttk.Text(self.basic_frame, height=5)
-        self.link_text.pack(fill=X, pady=5)
+            foreground="#555555",
+        ).pack(side=LEFT, padx=(5, 0))
+        self.link_text = ttk.Text(left_content, height=5)
+        self.link_text.pack(fill=BOTH, expand=True, pady=5)
 
-        # 状态
-        self.status_var = ttk.StringVar(value="状态: 就绪")
+        # 右：基本选项
+        right_content = ttk.Frame(content_row)
+        right_content.grid(row=0, column=1, sticky=NSEW, padx=(10, 0))
+        right_title = ttk.Frame(right_content)
+        right_title.pack(fill=X)
         ttk.Label(
-            self.basic_frame,
-            textvariable=self.status_var,
+            right_title, text="基本选项", font=("Microsoft YaHei", 10, "bold")
+        ).pack(side=LEFT)
+        ttk.Label(
+            right_title,
+            text="仅生效一个，不选则下载全部",
             font=("Microsoft YaHei", 9),
-            foreground="gray",
-        ).pack(anchor=W, pady=(5, 0))
-
-        # 基本选项
-        basic_group = ttk.LabelFrame(self.basic_frame, text="基本选项")
-        basic_group.pack(fill=X, pady=10)
+            foreground="#555555",
+        ).pack(side=LEFT, padx=(5, 0))
+        basic_group = ttk.LabelFrame(right_content, text="")
+        basic_group.pack(fill=BOTH, expand=True, pady=5)
         basic_inner = ttk.Frame(basic_group, padding=10)
-        basic_inner.pack(fill=X)
+        basic_inner.pack(fill=BOTH, expand=True)
         basic_inner.columnconfigure(0, weight=1)
         basic_inner.columnconfigure(1, weight=1)
-        basic_inner.columnconfigure(2, weight=1)
 
         for i, key in enumerate(BASIC_KEYS_LIST):
             desc = ""
@@ -379,8 +397,17 @@ class BBDownLauncher(ttk.Window):
                 text=desc,
                 variable=var,
                 bootstyle="round-toggle",
-            ).grid(row=i // 3, column=i % 3, sticky=W, pady=4, padx=5)
+            ).grid(row=i // 2, column=i % 2, sticky=W, pady=4, padx=5)
             self.basic_vars[key] = var
+
+        # 状态
+        self.status_var = ttk.StringVar(value="状态: 就绪")
+        ttk.Label(
+            self.basic_frame,
+            textvariable=self.status_var,
+            font=("Microsoft YaHei", 9),
+            foreground="#555555",
+        ).pack(anchor=W, pady=(5, 0))
 
     def _create_advanced_frame(self):
         self.advanced_frame = ttk.Frame(self.content_frame)
@@ -389,7 +416,7 @@ class BBDownLauncher(ttk.Window):
             self.advanced_frame,
             text="提示：开关参数勾选即启用；输入框留空表示不附加该参数。",
             font=("Microsoft YaHei", 9),
-            foreground="gray",
+            foreground="#555555",
         ).pack(anchor=W, pady=(5, 5))
 
         scroll = ScrolledFrame(self.advanced_frame, autohide=True)
@@ -407,11 +434,12 @@ class BBDownLauncher(ttk.Window):
                 group_inners[group].pack(fill=X)
 
             item = ttk.Frame(group_inners[group])
-            item.pack(fill=X, pady=5)
+            item.pack(fill=X, pady=4)
             item.columnconfigure(0, minsize=180)
             item.columnconfigure(1, weight=1)
-            item.columnconfigure(2, minsize=60)
+            item.columnconfigure(2, minsize=80)
 
+            # 参数标志
             ttk.Label(
                 item,
                 text=cli,
@@ -423,12 +451,6 @@ class BBDownLauncher(ttk.Window):
                 var = BooleanVar(
                     value=self.config_data["advanced"].get(key, False)
                 )
-                ttk.Label(
-                    item,
-                    text=desc,
-                    font=("Microsoft YaHei", 9),
-                    foreground="#555555",
-                ).grid(row=0, column=1, sticky=W, pady=(0, 2))
                 ttk.Checkbutton(
                     item, text="", variable=var, bootstyle="round-toggle"
                 ).grid(row=0, column=2, sticky=E, pady=(0, 2))
@@ -439,13 +461,15 @@ class BBDownLauncher(ttk.Window):
                 val = self.config_data["advanced"].get(key, "")
                 if val:
                     entry.insert(0, str(val))
-                ttk.Label(
-                    item,
-                    text=desc,
-                    font=("Microsoft YaHei", 9),
-                    foreground="#555555",
-                ).grid(row=1, column=1, columnspan=2, sticky=W)
                 self.adv_entries[key] = entry
+
+            # 描述文字统一放在第二行
+            ttk.Label(
+                item,
+                text=desc,
+                font=("Microsoft YaHei", 9),
+                foreground="#555555",
+            ).grid(row=1, column=1, columnspan=2, sticky=W, pady=(2, 0))
 
     def _show_basic(self):
         self.advanced_frame.pack_forget()
