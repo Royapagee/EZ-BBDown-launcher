@@ -185,7 +185,6 @@ class BBDownLauncher(ttk.Window):
 
         ttk.Label(
             title_frame,
-            text="EZ-BBDown-launcher",
             font=("Microsoft YaHei", 20, "bold"),
         ).pack(anchor=W)
         ttk.Label(
