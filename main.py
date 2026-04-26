@@ -185,14 +185,14 @@ class BBDownLauncher(ttk.Window):
 
         ttk.Label(
             title_frame,
-            text="BBDown Launcher",
+            text="EZ-BBDown-launcher",
             font=("Microsoft YaHei", 20, "bold"),
         ).pack(anchor=W)
         ttk.Label(
             title_frame,
-            text="简易 BBDown 下载器启动器",
+            text="简易 BBDown 下载启动器",
             font=("Microsoft YaHei", 11),
-            foreground="#555555",
+            foreground="gray",
         ).pack(anchor=W, pady=(0, 5))
 
         ttk.Separator(self, bootstyle=SECONDARY).pack(fill=X, padx=15)
@@ -344,7 +344,7 @@ class BBDownLauncher(ttk.Window):
             self.basic_frame,
             text="支持多行，一行一个",
             font=("Microsoft YaHei", 9),
-            foreground="#555555",
+            foreground="gray",
         ).pack(anchor=W)
         self.link_text = ttk.Text(self.basic_frame, height=5)
         self.link_text.pack(fill=X, pady=5)
@@ -355,7 +355,7 @@ class BBDownLauncher(ttk.Window):
             self.basic_frame,
             textvariable=self.status_var,
             font=("Microsoft YaHei", 9),
-            foreground="#555555",
+            foreground="gray",
         ).pack(anchor=W, pady=(5, 0))
 
         # 基本选项
@@ -389,7 +389,7 @@ class BBDownLauncher(ttk.Window):
             self.advanced_frame,
             text="提示：开关参数勾选即启用；输入框留空表示不附加该参数。",
             font=("Microsoft YaHei", 9),
-            foreground="#555555",
+            foreground="gray",
         ).pack(anchor=W, pady=(5, 5))
 
         scroll = ScrolledFrame(self.advanced_frame, autohide=True)
