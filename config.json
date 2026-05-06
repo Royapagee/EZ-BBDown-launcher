@@ -1,10 +1,10 @@
 {
-  "BinPath": "bin",
-  "SavePath": "downloads",
+  "BinPath": "",
+  "SavePath": "",
   "theme": "light",
   "basic": {
     "video-only": false,
-    "audio-only": false,
+    "audio-only": true,
     "danmaku-only": false,
     "sub-only": false,
     "cover-only": false

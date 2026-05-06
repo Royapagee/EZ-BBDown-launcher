@@ -136,9 +136,11 @@ class BBDownLauncher(ttk.Window):
         super().__init__(
             title="BBDown Launcher",
             themename=initial_theme,
-            minsize=(900, 700),
+            minsize=(900, 820),
+            maxsize=(900, 820),
         )
-        self.geometry("1000x800")
+        self.geometry("900x820")
+        self.resizable(False, False)
 
         self.process = None
         self.output_queue = Queue()
@@ -149,6 +151,7 @@ class BBDownLauncher(ttk.Window):
         self.adv_entries = {}
 
         self._create_widgets()
+        self._init_powershell()
         self.after(100, self._check_queue)
 
     def _load_config(self):
@@ -170,6 +173,24 @@ class BBDownLauncher(ttk.Window):
                 print(f"加载配置失败: {e}")
                 return DEFAULT_CONFIG.copy()
         return DEFAULT_CONFIG.copy()
+
+    def _init_powershell(self):
+        bin_path = self.config_data.get("BinPath", "bin").strip()
+        try:
+            self.process = subprocess.Popen(
+                ["powershell.exe", "-NoExit", "-Command", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=bin_path,
+            )
+            init_cmd = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+            self.process.stdin.write(init_cmd.encode("utf-8"))
+            self.process.stdin.flush()
+            self._append_log("[系统] PowerShell 已就绪\n")
+            threading.Thread(target=self._read_output, daemon=True).start()
+        except Exception as e:
+            self._append_log(f"[错误] 启动PowerShell失败: {e}\n")
 
     def _save_config(self):
         try:
@@ -236,24 +257,14 @@ class BBDownLauncher(ttk.Window):
             width=10,
         ).pack(side=LEFT, padx=5)
 
-        self.start_btn = ttk.Button(
+        self.toggle_btn = ttk.Button(
             nav_right,
             text="▶ 启动",
-            command=self._start_download,
+            command=self._toggle_process,
             bootstyle=SUCCESS,
             width=10,
         )
-        self.start_btn.pack(side=LEFT, padx=5)
-
-        self.stop_btn = ttk.Button(
-            nav_right,
-            text="停止",
-            command=self._stop_process,
-            bootstyle=DANGER,
-            width=10,
-            state=DISABLED,
-        )
-        self.stop_btn.pack(side=LEFT, padx=5)
+        self.toggle_btn.pack(side=LEFT, padx=5)
 
         # ===== 内容区域（可切换） =====
         self.content_frame = ttk.Frame(self)
@@ -343,8 +354,8 @@ class BBDownLauncher(ttk.Window):
         # ===== 内容行：视频链接 + 基本选项（左右平分） =====
         content_row = ttk.Frame(self.basic_frame)
         content_row.pack(fill=BOTH, expand=True, pady=10)
-        content_row.columnconfigure(0, weight=1)
-        content_row.columnconfigure(1, weight=1)
+        content_row.columnconfigure(0, weight=1, uniform="content")
+        content_row.columnconfigure(1, weight=1, uniform="content")
         content_row.rowconfigure(0, weight=1)
 
         # 左：视频链接
@@ -361,7 +372,7 @@ class BBDownLauncher(ttk.Window):
             font=("Microsoft YaHei", 9),
             foreground="#555555",
         ).pack(side=LEFT, padx=(5, 0))
-        self.link_text = ttk.Text(left_content, height=5)
+        self.link_text = ttk.Text(left_content, height=5, width=1)
         self.link_text.pack(fill=BOTH, expand=True, pady=5)
 
         # 右：基本选项
@@ -502,15 +513,24 @@ class BBDownLauncher(ttk.Window):
         self._save_config()
 
     def _append_log(self, text):
-        self.log_text.configure(state=NORMAL)
-        self.log_text.insert("end", text)
-        self.log_text.see("end")
-        self.log_text.configure(state=DISABLED)
+        self.log_text.text.configure(state=NORMAL)
+        self.log_text.text.insert("end", text)
+        self.log_text.text.see("end")
+        self.log_text.text.configure(state=DISABLED)
 
     def _check_queue(self):
         while not self.output_queue.empty():
             text = self.output_queue.get()
             self._append_log(text)
+            line = text.strip()
+            if "BBDown version" in line:
+                self.status_var.set("状态: 运行中")
+                self.is_running = True
+                self.toggle_btn.configure(text="■ 停止", bootstyle=DANGER)
+            elif "任务完成" in line:
+                self.status_var.set("状态: 已完成")
+                self.is_running = False
+                self.toggle_btn.configure(text="▶ 启动", bootstyle=SUCCESS)
         self.after(100, self._check_queue)
 
     def _collect_config(self):
@@ -563,18 +583,21 @@ class BBDownLauncher(ttk.Window):
 
         return args
 
+    def _toggle_process(self):
+        if self.is_running:
+            self._stop_process()
+        else:
+            self._start_download()
+
     def _start_download(self):
         if self.is_running:
             return
 
         self._show_basic()
 
-        if self.process and self.process.poll() is None:
-            try:
-                self.process.terminate()
-            except Exception:
-                pass
-            self.process = None
+        if not self.process or self.process.poll() is not None:
+            self._append_log("[错误] PowerShell进程未运行\n")
+            return
 
         self._collect_config()
 
@@ -597,35 +620,11 @@ class BBDownLauncher(ttk.Window):
         )
 
         self.is_running = True
-        self.start_btn.configure(state=DISABLED)
-        self.stop_btn.configure(state=NORMAL)
+        self.toggle_btn.configure(text="■ 停止", bootstyle=DANGER)
         self.status_var.set("状态: 运行中")
         self._append_log("=" * 50 + "\n")
         self._append_log(f"开始下载，共 {len(urls)} 个链接\n")
         self._append_log("=" * 50 + "\n")
-
-        try:
-            self.process = subprocess.Popen(
-                ["powershell.exe", "-NoExit", "-Command", "-"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                cwd=bin_path,
-            )
-        except Exception as e:
-            self._append_log(f"[错误] 启动PowerShell失败: {e}\n")
-            self.is_running = False
-            self.start_btn.configure(state=NORMAL)
-            self.stop_btn.configure(state=DISABLED)
-            self.status_var.set("状态: 就绪")
-            return
-
-        init_cmd = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
-        try:
-            self.process.stdin.write(init_cmd.encode("utf-8"))
-            self.process.stdin.flush()
-        except Exception as e:
-            self._append_log(f"[警告] 设置编码失败: {e}\n")
 
         for url in urls:
             if not self.is_running:
@@ -638,8 +637,6 @@ class BBDownLauncher(ttk.Window):
             except Exception as e:
                 self._append_log(f"[错误] 发送命令失败: {e}\n")
                 break
-
-        threading.Thread(target=self._read_output, daemon=True).start()
 
     def _read_output(self):
         try:
@@ -663,31 +660,15 @@ class BBDownLauncher(ttk.Window):
 
     def _on_process_end(self):
         self.is_running = False
-        self.start_btn.configure(state=NORMAL)
-        self.stop_btn.configure(state=DISABLED)
+        self.toggle_btn.configure(text="▶ 启动", bootstyle=SUCCESS)
         self.status_var.set("状态: 就绪")
-        if self.process:
-            try:
-                self.process.stdout.close()
-            except Exception:
-                pass
-            try:
-                self.process.stdin.close()
-            except Exception:
-                pass
-            self.process = None
+        self._append_log("[系统] PowerShell 进程已结束\n")
 
     def _stop_process(self):
-        if self.process and self.process.poll() is None:
-            try:
-                self.process.terminate()
-                self._append_log("\n[系统] 已发送终止信号\n")
-            except Exception as e:
-                self._append_log(f"\n[错误] 终止进程失败: {e}\n")
         self.is_running = False
-        self.start_btn.configure(state=NORMAL)
-        self.stop_btn.configure(state=DISABLED)
+        self.toggle_btn.configure(text="▶ 启动", bootstyle=SUCCESS)
         self.status_var.set("状态: 就绪")
+        self._append_log("\n[系统] 已停止下载\n")
 
     def _send_command(self):
         if not self.process or self.process.poll() is not None:
