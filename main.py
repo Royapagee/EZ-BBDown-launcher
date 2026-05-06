@@ -161,6 +161,7 @@ class BBDownLauncher(ttk.Window):
         self.process = None
         self.output_queue = Queue()
         self.is_running = False
+        self._is_refreshing = False
 
         self.basic_vars = {}
         self.adv_vars = {}
@@ -175,7 +176,14 @@ class BBDownLauncher(ttk.Window):
 
     def _load_config(self):
         if not os.path.exists(CONFIG_FILE):
-            return DEFAULT_CONFIG.copy()
+            config = DEFAULT_CONFIG.copy()
+            config["BinPath"] = os.path.dirname(os.path.abspath(__file__))
+            try:
+                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                    json.dump(config, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"创建配置文件失败: {e}")
+            return config
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -195,6 +203,8 @@ class BBDownLauncher(ttk.Window):
 
     def _init_powershell(self):
         bin_path = self.config_data.get("BinPath", "bin").strip()
+        if not os.path.isdir(bin_path):
+            bin_path = os.getcwd()
         try:
             self.process = subprocess.Popen(
                 ["powershell.exe", "-NoExit", "-Command", "-"],
@@ -202,6 +212,7 @@ class BBDownLauncher(ttk.Window):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 cwd=bin_path,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             init_cmd = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
             self.process.stdin.write(init_cmd.encode("utf-8"))
@@ -210,6 +221,17 @@ class BBDownLauncher(ttk.Window):
             threading.Thread(target=self._read_output, daemon=True).start()
         except Exception as e:
             self._append_log(f"[错误] 启动PowerShell失败: {e}\n")
+
+    def _refresh_terminal(self):
+        self._is_refreshing = True
+        if self.process and self.process.poll() is None:
+            try:
+                self.process.terminate()
+            except Exception:
+                pass
+        self.process = None
+        self.config_data["BinPath"] = self.binpath_entry.get().strip()
+        self._init_powershell()
 
     def _save_config(self):
         try:
@@ -430,14 +452,27 @@ class BBDownLauncher(ttk.Window):
             ).grid(row=i // 2, column=i % 2, sticky=W, pady=4, padx=5)
             self.basic_vars[key] = var
 
-        # 状态
+        # 状态行（状态 + 刷新终端）
+        status_row = ttk.Frame(self.basic_frame)
+        status_row.pack(fill=X, pady=(5, 0))
+
         self.status_var = ttk.StringVar(value="状态: 就绪")
         ttk.Label(
-            self.basic_frame,
+            status_row,
             textvariable=self.status_var,
             font=("Microsoft YaHei", 9),
             foreground="#555555",
-        ).pack(anchor=W, pady=(5, 0))
+        ).pack(side=LEFT)
+
+        refresh_label = ttk.Label(
+            status_row,
+            text="刷新终端",
+            font=("Microsoft YaHei", 9),
+            foreground="#0078D4",
+            cursor="hand2",
+        )
+        refresh_label.pack(side=RIGHT)
+        refresh_label.bind("<Button-1>", lambda e: self._refresh_terminal())
 
     def _create_advanced_frame(self):
         self.advanced_frame = ttk.Frame(self.content_frame)
@@ -670,10 +705,14 @@ class BBDownLauncher(ttk.Window):
         except Exception as e:
             self.output_queue.put(f"\n[错误] 读取输出出错: {e}\n")
         finally:
-            self.output_queue.put("\n[系统] 进程已结束\n")
-            self.after(0, self._on_process_end)
+            if not self._is_refreshing:
+                self.output_queue.put("\n[系统] 进程已结束\n")
+                self.after(0, self._on_process_end)
 
     def _on_process_end(self):
+        if self._is_refreshing:
+            self._is_refreshing = False
+            return
         self.is_running = False
         self._update_ui_idle()
         self._append_log(LOG_PROCESS_ENDED)
