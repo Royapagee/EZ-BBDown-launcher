@@ -378,7 +378,7 @@ class BBDownLauncher(ttk.Window):
             font=("Microsoft YaHei", 9),
             foreground="#555555",
         ).pack(side=LEFT, padx=(5, 0))
-        basic_group = ttk.LabelFrame(right_content, text="")
+        basic_group = ttk.LabelFrame(right_content, relief="solid", borderwidth=1)
         basic_group.pack(fill=BOTH, expand=True, pady=5)
         basic_inner = ttk.Frame(basic_group, padding=10)
         basic_inner.pack(fill=BOTH, expand=True)
@@ -435,17 +435,24 @@ class BBDownLauncher(ttk.Window):
 
             item = ttk.Frame(group_inners[group])
             item.pack(fill=X, pady=4)
-            item.columnconfigure(0, minsize=180)
+            item.columnconfigure(0, minsize=200)
             item.columnconfigure(1, weight=1)
             item.columnconfigure(2, minsize=80)
 
-            # 参数标志
+            # Row 0: 参数标志(col0) | 描述(col1) | toggle(col2, 仅switch)
             ttk.Label(
                 item,
                 text=cli,
                 font=("Consolas", 10),
                 foreground="#555555",
-            ).grid(row=0, column=0, sticky=W, padx=(0, 10), pady=(0, 2))
+            ).grid(row=0, column=0, sticky=W, padx=(0, 10))
+
+            ttk.Label(
+                item,
+                text=desc,
+                font=("Microsoft YaHei", 9),
+                foreground="#555555",
+            ).grid(row=0, column=1, sticky=W)
 
             if ptype == "switch":
                 var = BooleanVar(
@@ -456,20 +463,13 @@ class BBDownLauncher(ttk.Window):
                 ).grid(row=0, column=2, sticky=E, pady=(0, 2))
                 self.adv_vars[key] = var
             else:
+                # Row 1: 空(col0) | 输入框(col1, colspan=2)
                 entry = ttk.Entry(item)
-                entry.grid(row=0, column=1, columnspan=2, sticky=EW, pady=(0, 2))
+                entry.grid(row=1, column=1, columnspan=2, sticky=EW, pady=(4, 0))
                 val = self.config_data["advanced"].get(key, "")
                 if val:
                     entry.insert(0, str(val))
                 self.adv_entries[key] = entry
-
-            # 描述文字统一放在第二行
-            ttk.Label(
-                item,
-                text=desc,
-                font=("Microsoft YaHei", 9),
-                foreground="#555555",
-            ).grid(row=1, column=1, columnspan=2, sticky=W, pady=(2, 0))
 
     def _show_basic(self):
         self.advanced_frame.pack_forget()
