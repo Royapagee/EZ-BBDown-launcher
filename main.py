@@ -13,6 +13,21 @@ CONFIG_FILE = "config.json"
 LIGHT_THEME = "flatly"
 DARK_THEME = "darkly"
 
+STATUS_READY = "状态: 就绪"
+STATUS_RUNNING = "状态: 运行中"
+STATUS_COMPLETED = "状态: 已完成"
+
+BTN_START = "▶ 启动"
+BTN_STOP = "■ 停止"
+
+LOG_PROCESS_READY = "[系统] PowerShell 已就绪\n"
+LOG_PROCESS_ENDED = "[系统] PowerShell 进程已结束\n"
+LOG_DOWNLOAD_STOPPED = "\n[系统] 已停止下载\n"
+LOG_ERROR_PROCESS_NOT_RUNNING = "[错误] PowerShell进程未运行\n"
+LOG_ERROR_SEND_COMMAND_FAILED = "[错误] 发送命令失败: {e}\n"
+LOG_ERROR_BBDOWN_NOT_FOUND = "[错误] 未找到 BBDown.exe: {path}\n"
+LOG_ERROR_NO_URL = "[错误] 请输入至少一个视频链接\n"
+
 # (key, cli_flag, description, param_type, group)
 PARAM_DEFS = [
     ("use-tv-api", "--use-tv-api", "使用TV端解析模式", "switch", "解析选项"),
@@ -63,8 +78,9 @@ PARAM_DEFS = [
     ("config-file", "--config-file", "读取指定的BBDown本地配置文件(默认为 BBDown.config)", "input", "其他参数"),
 ]
 
-BASIC_KEYS = {"video-only", "audio-only", "danmaku-only", "sub-only", "cover-only"}
 BASIC_KEYS_LIST = ["video-only", "audio-only", "danmaku-only", "sub-only", "cover-only"]
+BASIC_KEYS = set(BASIC_KEYS_LIST)
+PARAM_MAP = {p[0]: p[1] for p in PARAM_DEFS}
 
 DEFAULT_CONFIG = {
     "BinPath": "bin",
@@ -154,25 +170,28 @@ class BBDownLauncher(ttk.Window):
         self._init_powershell()
         self.after(100, self._check_queue)
 
+    def _get_cli_flag(self, key):
+        return PARAM_MAP.get(key)
+
     def _load_config(self):
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                merged = DEFAULT_CONFIG.copy()
-                merged.update(data)
-                for k in DEFAULT_CONFIG:
-                    if k not in merged:
-                        merged[k] = DEFAULT_CONFIG[k]
-                    elif isinstance(DEFAULT_CONFIG[k], dict):
-                        for subk in DEFAULT_CONFIG[k]:
-                            if subk not in merged[k]:
-                                merged[k][subk] = DEFAULT_CONFIG[k][subk]
-                return merged
-            except Exception as e:
-                print(f"加载配置失败: {e}")
-                return DEFAULT_CONFIG.copy()
-        return DEFAULT_CONFIG.copy()
+        if not os.path.exists(CONFIG_FILE):
+            return DEFAULT_CONFIG.copy()
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return self._merge_config(DEFAULT_CONFIG, data)
+        except Exception as e:
+            print(f"加载配置失败: {e}")
+            return DEFAULT_CONFIG.copy()
+
+    def _merge_config(self, default, loaded):
+        merged = default.copy()
+        for key, value in loaded.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = self._merge_config(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
 
     def _init_powershell(self):
         bin_path = self.config_data.get("BinPath", "bin").strip()
@@ -187,7 +206,7 @@ class BBDownLauncher(ttk.Window):
             init_cmd = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
             self.process.stdin.write(init_cmd.encode("utf-8"))
             self.process.stdin.flush()
-            self._append_log("[系统] PowerShell 已就绪\n")
+            self._append_log(LOG_PROCESS_READY)
             threading.Thread(target=self._read_output, daemon=True).start()
         except Exception as e:
             self._append_log(f"[错误] 启动PowerShell失败: {e}\n")
@@ -498,6 +517,9 @@ class BBDownLauncher(ttk.Window):
         self.log_frame.pack_forget()
         self.bottom_frame.pack_forget()
 
+    def _is_process_alive(self):
+        return self.process and self.process.poll() is None
+
     def _browse_folder(self, entry):
         folder = filedialog.askdirectory()
         if folder:
@@ -524,13 +546,13 @@ class BBDownLauncher(ttk.Window):
             self._append_log(text)
             line = text.strip()
             if "BBDown version" in line:
-                self.status_var.set("状态: 运行中")
+                self.status_var.set(STATUS_RUNNING)
                 self.is_running = True
-                self.toggle_btn.configure(text="■ 停止", bootstyle=DANGER)
+                self.toggle_btn.configure(text=BTN_STOP, bootstyle=DANGER)
             elif "任务完成" in line:
-                self.status_var.set("状态: 已完成")
+                self.status_var.set(STATUS_COMPLETED)
                 self.is_running = False
-                self.toggle_btn.configure(text="▶ 启动", bootstyle=SUCCESS)
+                self.toggle_btn.configure(text=BTN_START, bootstyle=SUCCESS)
         self.after(100, self._check_queue)
 
     def _collect_config(self):
@@ -556,30 +578,23 @@ class BBDownLauncher(ttk.Window):
             args.extend(["--work-dir", save_path])
 
         for key, var in self.basic_vars.items():
-            val = var.get()
-            default = DEFAULT_CONFIG["basic"].get(key, False)
-            if val != default and val:
-                for p in PARAM_DEFS:
-                    if p[0] == key:
-                        args.append(p[1])
-                        break
+            if var.get() and var.get() != DEFAULT_CONFIG["basic"].get(key, False):
+                cli_flag = self._get_cli_flag(key)
+                if cli_flag:
+                    args.append(cli_flag)
 
         for key, var in self.adv_vars.items():
-            val = var.get()
-            default = DEFAULT_CONFIG["advanced"].get(key, False)
-            if val != default and val:
-                for p in PARAM_DEFS:
-                    if p[0] == key:
-                        args.append(p[1])
-                        break
+            if var.get() and var.get() != DEFAULT_CONFIG["advanced"].get(key, False):
+                cli_flag = self._get_cli_flag(key)
+                if cli_flag:
+                    args.append(cli_flag)
 
         for key, entry in self.adv_entries.items():
             val = entry.get().strip()
             if val:
-                for p in PARAM_DEFS:
-                    if p[0] == key:
-                        args.extend([p[1], val])
-                        break
+                cli_flag = self._get_cli_flag(key)
+                if cli_flag:
+                    args.extend([cli_flag, val])
 
         return args
 
@@ -595,8 +610,8 @@ class BBDownLauncher(ttk.Window):
 
         self._show_basic()
 
-        if not self.process or self.process.poll() is not None:
-            self._append_log("[错误] PowerShell进程未运行\n")
+        if not self._is_process_alive():
+            self._append_log(LOG_ERROR_PROCESS_NOT_RUNNING)
             return
 
         self._collect_config()
@@ -605,13 +620,13 @@ class BBDownLauncher(ttk.Window):
         urls = [u.strip() for u in urls if u.strip()]
 
         if not urls:
-            self._append_log("[错误] 请输入至少一个视频链接\n")
+            self._append_log(LOG_ERROR_NO_URL)
             return
 
         bin_path = self.config_data.get("BinPath", "bin").strip()
         bbdown_exe = os.path.join(bin_path, "BBDown.exe")
         if not os.path.exists(bbdown_exe):
-            self._append_log(f"[错误] 未找到 BBDown.exe: {bbdown_exe}\n")
+            self._append_log(LOG_ERROR_BBDOWN_NOT_FOUND.format(path=bbdown_exe))
             return
 
         args = self._build_args()
@@ -620,8 +635,8 @@ class BBDownLauncher(ttk.Window):
         )
 
         self.is_running = True
-        self.toggle_btn.configure(text="■ 停止", bootstyle=DANGER)
-        self.status_var.set("状态: 运行中")
+        self.toggle_btn.configure(text=BTN_STOP, bootstyle=DANGER)
+        self.status_var.set(STATUS_RUNNING)
         self._append_log("=" * 50 + "\n")
         self._append_log(f"开始下载，共 {len(urls)} 个链接\n")
         self._append_log("=" * 50 + "\n")
@@ -635,7 +650,7 @@ class BBDownLauncher(ttk.Window):
                 self.process.stdin.write(cmd.encode("utf-8"))
                 self.process.stdin.flush()
             except Exception as e:
-                self._append_log(f"[错误] 发送命令失败: {e}\n")
+                self._append_log(LOG_ERROR_SEND_COMMAND_FAILED.format(e=e))
                 break
 
     def _read_output(self):
@@ -660,19 +675,21 @@ class BBDownLauncher(ttk.Window):
 
     def _on_process_end(self):
         self.is_running = False
-        self.toggle_btn.configure(text="▶ 启动", bootstyle=SUCCESS)
-        self.status_var.set("状态: 就绪")
-        self._append_log("[系统] PowerShell 进程已结束\n")
+        self._update_ui_idle()
+        self._append_log(LOG_PROCESS_ENDED)
+
+    def _update_ui_idle(self):
+        self.toggle_btn.configure(text=BTN_START, bootstyle=SUCCESS)
+        self.status_var.set(STATUS_READY)
 
     def _stop_process(self):
         self.is_running = False
-        self.toggle_btn.configure(text="▶ 启动", bootstyle=SUCCESS)
-        self.status_var.set("状态: 就绪")
-        self._append_log("\n[系统] 已停止下载\n")
+        self._update_ui_idle()
+        self._append_log(LOG_DOWNLOAD_STOPPED)
 
     def _send_command(self):
-        if not self.process or self.process.poll() is not None:
-            self._append_log("[错误] PowerShell进程未运行\n")
+        if not self._is_process_alive():
+            self._append_log(LOG_ERROR_PROCESS_NOT_RUNNING)
             return
 
         cmd = self.cmd_entry.get().strip()
@@ -685,7 +702,7 @@ class BBDownLauncher(ttk.Window):
             self.process.stdin.write((cmd + "\n").encode("utf-8"))
             self.process.stdin.flush()
         except Exception as e:
-            self._append_log(f"[错误] 发送命令失败: {e}\n")
+            self._append_log(LOG_ERROR_SEND_COMMAND_FAILED.format(e=e))
 
 
 if __name__ == "__main__":
